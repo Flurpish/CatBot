@@ -201,7 +201,7 @@ async def ping(interaction: discord.Interaction):
     title="The title of the embed.",
     description="The description of the embed."
 )
-async def send_embed(interaction: discord.Interaction, title: str, description: str, channel_id: str = None):
+async def make_embed(interaction: discord.Interaction, title: str, description: str, channel_id: str = None):
     """Send an embedded message to a specified channel."""
     if not is_bot_admin(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
