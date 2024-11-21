@@ -1,0 +1,15 @@
+# To update the bot
+cd /home/dominic_faoro_22/CatBot
+git pull
+
+# Restart catbot
+sudo systemctl restart catbot
+
+# Stop catbot
+sudo systemctl stop catbot
+
+# Start catbot
+sudo systemctl start catbot
+
+To connect it to a discord server, update the server ID in the bot
+Update the log channel value

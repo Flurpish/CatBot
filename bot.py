@@ -211,7 +211,8 @@ async def send_embed(interaction: discord.Interaction, title: str, description: 
 
     embed = discord.Embed(title=title, description=description)
     await channel.send(embed=embed)
-    await interaction.response.send_message(f'Message sent to {channel.mention}.', ephemeral=True)
+    
+    await interaction.followup.send(f'Message sent to {channel.mention}.', ephemeral=True)
 
 @bot.tree.command(name="adminlist", description="List all bot and normal admins.")
 @app_commands.describe(visible="Make the output visible to everyone? Defaults to False.")
