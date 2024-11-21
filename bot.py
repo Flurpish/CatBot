@@ -172,7 +172,7 @@ async def on_ready():
     await migrate_db_schema()  # Migrate the database schema if needed
     await init_db()  # Initialize the database
     try:
-        bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
+        #bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
         synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f'Synced {len(synced)} commands to guild {GUILD_ID}')
     except Exception as e:
@@ -207,29 +207,23 @@ async def send_embed(interaction: discord.Interaction, title: str, description: 
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
     
+    # Resolve the channel
     try:
-        # Determine the target channel
         target_channel = bot.get_channel(int(channel_id)) if channel_id else interaction.channel
-
         if not target_channel:
             await interaction.response.send_message("Invalid or inaccessible channel.", ephemeral=True)
             return
 
-        # Create the embed
+        # Create and send the embed
         embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
-
-        # Send the embed message to the target channel
         await target_channel.send(embed=embed)
 
-        # Notify the user of success
-        await interaction.response.send_message(
-            f"Embedded message sent to {target_channel.mention}.", ephemeral=True
-        )
-
+        # Respond to the command once
+        await interaction.response.send_message(f"Embed sent to {target_channel.mention}.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(
-            f"An error occurred: {str(e)}", ephemeral=True
-        )
+        # Handle unexpected errors
+        await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
+
 
 
 @bot.tree.command(name="adminlist", description="List all bot and normal admins.")
