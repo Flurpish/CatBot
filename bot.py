@@ -203,17 +203,18 @@ async def send_embed(interaction: discord.Interaction, title: str, description: 
         await interaction.response.send_message('You are not authorized to use this command.', ephemeral=True)
         return
 
+    # Fetch the target channel
     channel = bot.get_channel(int(channel_id)) if channel_id else interaction.channel
     if not channel:
         await interaction.response.send_message('Invalid or inaccessible channel.', ephemeral=True)
         return
 
+    # Create the embed
     embed = discord.Embed(title=title, description=description)
 
-    # Ensure a single response
-    await interaction.response.defer()  # Defer the interaction response
+    # Send the embed and respond ONCE
     await channel.send(embed=embed)
-    await interaction.followup.send(f'Message sent to {channel.mention}.', ephemeral=True)
+    await interaction.response.send_message(f'Message sent to {channel.mention}.', ephemeral=True)
 
 
 @bot.tree.command(name="adminlist", description="List all bot and normal admins.")
