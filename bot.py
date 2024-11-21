@@ -172,7 +172,7 @@ async def on_ready():
     await migrate_db_schema()  # Migrate the database schema if needed
     await init_db()  # Initialize the database
     try:
-        #bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
+        bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
         synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
         print(f'Synced {len(synced)} commands to guild {GUILD_ID}')
     except Exception as e:
