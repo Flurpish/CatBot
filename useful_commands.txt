@@ -13,3 +13,6 @@ sudo systemctl start catbot
 
 To connect it to a discord server, update the server ID in the bot
 Update the log channel value
+
+#Token for git, expires Dec 21
+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

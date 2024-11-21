@@ -195,7 +195,6 @@ async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     await interaction.response.send_message(f'Pong! Latency: {latency}ms')
 
-# Command: Send Embed
 @bot.tree.command(name='sendembed', description='Send an embedded message to a specified channel.')
 @app_commands.describe(channel_id='The channel ID to send the message to (optional)', title='Title of the embed', description='Description of the embed')
 async def send_embed(interaction: discord.Interaction, title: str, description: str, channel_id: str = None):
@@ -210,9 +209,12 @@ async def send_embed(interaction: discord.Interaction, title: str, description: 
         return
 
     embed = discord.Embed(title=title, description=description)
+
+    # Ensure a single response
+    await interaction.response.defer()  # Defer the interaction response
     await channel.send(embed=embed)
-    
     await interaction.followup.send(f'Message sent to {channel.mention}.', ephemeral=True)
+
 
 @bot.tree.command(name="adminlist", description="List all bot and normal admins.")
 @app_commands.describe(visible="Make the output visible to everyone? Defaults to False.")
