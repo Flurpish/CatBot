@@ -14,6 +14,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
+import sys
 
 
 # Start the keep-alive server
@@ -181,9 +182,12 @@ async def on_ready():
     bot.add_view(DayButtonView([]))  # Empty initialization for registration
 
 
-    weekly_report_task.start()
+    #weekly_report_task.start()
 
     print(f'{bot.user} has connected to Discord!')
+    log_channel = bot.get_channel(LOG_CHANNEL_ID)
+    if log_channel:
+        await log_channel.send("I'm awake!")
 
 # Command: Ping
 @bot.tree.command(name='ping', description='Check the bot\'s latency.')
@@ -196,7 +200,7 @@ async def ping(interaction: discord.Interaction):
 @app_commands.describe(channel_id='The channel ID to send the message to (optional)', title='Title of the embed', description='Description of the embed')
 async def send_embed(interaction: discord.Interaction, title: str, description: str, channel_id: str = None):
     """Send an embedded message to a specified channel."""
-    if not is_admin(interaction.user):
+    if not is_admin(interaction.user.id):
         await interaction.response.send_message('You are not authorized to use this command.', ephemeral=True)
         return
 
@@ -537,7 +541,7 @@ async def games(interaction: discord.Interaction, visible: bool = False):
 @app_commands.describe(message_id="The ID of the message to clear buttons from.")
 async def clearbuttons(interaction: discord.Interaction, message_id: str):
     """Remove all buttons from a message."""
-    if not is_bot_admin(interaction.user):
+    if not is_bot_admin(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
@@ -572,7 +576,7 @@ async def clearbuttons(interaction: discord.Interaction, message_id: str):
 )
 async def reset(interaction: discord.Interaction, user: discord.User, day: str = None):
     """Reset hours for a user for a specific day or the full week."""
-    if not is_admin(interaction.user):
+    if not is_admin(interaction.user.id):
         await interaction.response.send_message("You are not authorized to reset hours.", ephemeral=True)
         return
 
@@ -713,7 +717,7 @@ async def add(
     user: discord.User
 ):
     """Add hours to a specific game for a user on a specific day."""
-    if not is_admin(interaction.user):
+    if not is_admin(interaction.user.id):
         await interaction.response.send_message("You are not authorized to add hours.", ephemeral=True)
         return
 
@@ -754,7 +758,7 @@ async def add(
 )
 async def remove(interaction: discord.Interaction, day: str, game: str, hours: float, user: discord.User):
     """Remove hours from a specific game for a user on a specific day."""
-    if not is_admin(interaction.user):
+    if not is_admin(interaction.user.id):
         await interaction.response.send_message("You are not authorized to remove hours.", ephemeral=True)
         return
 
@@ -859,7 +863,7 @@ class DayButtonView(discord.ui.View):
 @app_commands.describe(message_id='The ID of the message to add buttons to.')
 async def add_buttons(interaction: discord.Interaction, message_id: str):
     """Add buttons dynamically for the days of the week, starting from Monday."""
-    if not is_bot_admin(interaction.user):
+    if not is_bot_admin(interaction.user.id):
         await interaction.response.send_message('You are not authorized to use this command.', ephemeral=True)
         return
 
@@ -1116,16 +1120,5 @@ async def weekly_report_task():
        # print("Weekly hours reset successfully.")
     except Exception as e:
         print(f"Error in weekly_report_task: {e}")
-
-@bot.tree.command(name="reboot", description="Reboot the bot (bot admins only).")
-async def reboot(interaction: discord.Interaction):
-    if not is_bot_admin(interaction.user):
-        await interaction.response.send_message("You are not authorized to reboot the bot.", ephemeral=True)
-        return
-
-    await interaction.response.send_message("Rebooting the bot...", ephemeral=True)
-    os.system("kill 1")  # Triggers a Replit restart
-
-
 
 bot.run(TOKEN)
