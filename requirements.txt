@@ -1,0 +1,6 @@
+discord.py
+aiosqlite
+flask
+python-dotenv
+openpyxl
+pandas
