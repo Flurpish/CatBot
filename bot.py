@@ -24,8 +24,8 @@ import sys
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD_ID = 717936676886020166  # Replace with your server's ID as an integer
-LOG_CHANNEL_ID = 803387116989055006  # Replace with your desired channel ID
+GUILD_ID = 1286455113589850112  # Replace with your server's ID as an integer
+LOG_CHANNEL_ID = 1286481588179308604  # Replace with your desired channel ID
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
