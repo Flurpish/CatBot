@@ -1,0 +1,24 @@
+[Admin+]
+/addbuttons {messageID} - Adds weekly buttons to a CatBot message.
+/adminadd {user} - Adds a user to admin.
+/adminremove {user} - Removes a user from admin.
+/botadminadd {user} - Adds a user to bot admin (Admin+ only).
+/botadminremove {user} - Removes a user from bot admin (Admin+ only).
+/clearbuttons {messageID} - Removes all buttons from a message.
+/resetweek - Resets all hours for every user.
+/sendembed {title} {description} - Sends an embedded message.
+/adddaily {day} - Adds a button for the desired day to the preset message.
+
+[Admin]
+/add {day} {game} {hours} {user to add to} - Adds hours to a user.
+/remove {day} {game} {hours} {user to remove from} - Removes hours from a user.
+/report - Provides a spreadsheet of all current hours.
+/reset {user} {optional: day} - Resets all hours for a user. Adding a day will reset that day only.
+/hours {user} - Shows a user's hours. Admins can view other users' hours.
+
+[Normal]
+/adminlist - View the current bot admins and normal admins.
+/commands - Shows a list of all commands.
+/games - Shows the list of games.
+/hours - Shows your logged hours for the week.
+/ping - Shows the bot's latency.

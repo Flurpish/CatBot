@@ -7,7 +7,6 @@ import aiosqlite
 import asyncio
 import os
 from dotenv import load_dotenv
-import datetime
 import csv
 import logging
 import pandas as pd
@@ -15,7 +14,8 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
 import sys
-
+import pytz
+from datetime import datetime, timedelta
 
 # Start the keep-alive server
 # start_server()
@@ -24,8 +24,8 @@ import sys
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD_ID = 1286455113589850112  # Replace with your server's ID as an integer
-LOG_CHANNEL_ID = 1286481588179308604  # Replace with your desired channel ID
+GUILD_ID = 717936676886020166  # Replace with your server's ID as an integer
+LOG_CHANNEL_ID = 803387116989055006  # Replace with your desired channel ID
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -112,16 +112,18 @@ async def migrate_db_schema():
         # Commit changes
         await db.commit()
 
+# Global variables to store channel ID and message ID
+daily_info = {"channel_id": None, "message_id": None}
 
 def is_admin(user):
-    """Check if a user is a normal admin."""
-    normal_admins = read_file("admins.txt")
-    return str(user) in normal_admins
+    """Check if a user is a admin."""
+    admins = read_file("admins.txt")
+    return str(user) in admins
 
-def is_bot_admin(user):
+def is_admin_plus(user):
     """Check if a user is a bot admin."""
-    bot_admins = read_file("bot_admin.txt")
-    return str(user) in bot_admins
+    admin_plus = read_file("admin_plus.txt")
+    return str(user) in admin_plus
 
 def read_file(file_name):
     """Read admins from a text file."""
@@ -165,6 +167,15 @@ def read_file(file_name):
             for line in file if line.strip()
         }
 
+async def schedule_daily_buttons():
+    """Schedules the dailyButtons task to run at midnight CST."""
+    while True:
+        cst = pytz.timezone("America/Chicago")
+        now = datetime.now(cst)
+        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        sleep_duration = (next_midnight - now).total_seconds()
+        await asyncio.sleep(sleep_duration) #sleep_duration
+        await dailyButtons()
 
 @bot.event
 async def on_ready():
@@ -181,13 +192,25 @@ async def on_ready():
     # Register persistent views
     bot.add_view(DayButtonView([]))  # Empty initialization for registration
 
-
-    #weekly_report_task.start()
+    bot.loop.create_task(schedule_daily_buttons()) #Begin the daily button loop
 
     print(f'{bot.user} has connected to Discord!')
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
     if log_channel:
         await log_channel.send("I'm awake!")
+
+@bot.tree.command(name="adddaily", description="Add a dailyButtons logic manually with a specific day.")
+@app_commands.describe(day="The day to simulate (e.g., Monday, Tuesday).")
+async def test_daily(interaction: discord.Interaction, day: str):
+    """Manually trigger the dailyButtons logic for a specific day."""
+    valid_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    if day not in valid_days:
+        await interaction.response.send_message(f"Invalid day. Choose from: {', '.join(valid_days)}", ephemeral=True)
+        return
+
+    await dailyButtons(test_day=day)
+    await interaction.response.send_message(f"Daily buttons logic executed for {day}.", ephemeral=True)
+
 
 # Command: Ping
 @bot.tree.command(name='ping', description='Check the bot\'s latency.')
@@ -203,7 +226,7 @@ async def ping(interaction: discord.Interaction):
 )
 async def make_embed(interaction: discord.Interaction, title: str, description: str, channel_id: str = None):
     """Send an embedded message to a specified channel."""
-    if not is_bot_admin(interaction.user.id):
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
     
@@ -224,43 +247,134 @@ async def make_embed(interaction: discord.Interaction, title: str, description: 
         # Handle unexpected errors
         await interaction.response.send_message(f"An error occurred: {str(e)}", ephemeral=True)
 
+@bot.tree.command(name="commands", description="List all available commands categorized by roles.")
+@app_commands.describe(visible="Make the output visible to everyone? Defaults to False.")
+async def list_commands(interaction: discord.Interaction, visible: bool=False):
+    """
+    List all available commands categorized by Admin+, Admin, and Normal.
+    Reads from a 'commands' text file.
+    """
+    if not os.path.exists("commands.txt"):
+        await interaction.response.send_message(
+            "The commands file is missing. Please create a 'commands' file with the necessary data.",
+            ephemeral=True,
+        )
+        return
+
+    try:
+        # Read the commands file
+        with open("commands.txt", "r") as file:
+            lines = [line.strip() for line in file if line.strip()]
+
+        # Parse the commands into categories
+        admin_plus_commands = []
+        admin_commands = []
+        normal_commands = []
+
+        current_category = None
+        for line in lines:
+            if line.lower() == "[admin+]":
+                current_category = admin_plus_commands
+            elif line.lower() == "[admin]":
+                current_category = admin_commands
+            elif line.lower() == "[normal]":
+                current_category = normal_commands
+            else:
+                if current_category is not None:
+                    current_category.append(line)
+
+        # Create the embed
+        embed = discord.Embed(
+            title="Available Commands",
+            description="Here is a list of all available commands categorized by roles. Most commands have the option of making it visible.",
+            color=discord.Color.blue(),
+        )
+
+        if admin_plus_commands:
+            embed.add_field(
+                name="**Admin+ Commands**",
+                value="\n".join(admin_plus_commands),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="**Admin+ Commands**",
+                value="No commands found.",
+                inline=False,
+            )
+
+        if admin_commands:
+            embed.add_field(
+                name="**Admin Commands**",
+                value="\n".join(admin_commands),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="**Admin Commands**",
+                value="No commands found.",
+                inline=False,
+            )
+
+        if normal_commands:
+            embed.add_field(
+                name="**Normal Commands**",
+                value="\n".join(normal_commands),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="**Normal Commands**",
+                value="No commands found.",
+                inline=False,
+            )
+
+        # Send the embed
+        await interaction.response.send_message(embed=embed, ephemeral=not visible)
+
+    except Exception as e:
+        print(f"Error in /commands: {e}")
+        await interaction.response.send_message(
+            "An error occurred while reading the commands file. Please try again later.",
+            ephemeral=True,
+        )
 
 
-@bot.tree.command(name="adminlist", description="List all bot and normal admins.")
+@bot.tree.command(name="adminlist", description="List all bot and admins.")
 @app_commands.describe(visible="Make the output visible to everyone? Defaults to False.")
 async def adminlist(interaction: discord.Interaction, visible: bool = False):
-    """List all bot admins and normal admins."""
+    """List all Admin+ and admins."""
 
-    bot_admins = read_file("bot_admin.txt")
-    normal_admins = read_file("admins.txt")
+    admin_plus = read_file("admin_plus.txt")
+    admins = read_file("admins.txt")
 
     embed = discord.Embed(
         title="Admin List",
-        description="List of bot admins and normal admins.",
+        description="List of Admin+ and admins.",
         color=discord.Color.blue(),
     )
 
-    if bot_admins:
-        bot_admins_list = "\n".join([f"{username} (ID: {user_id})" for user_id, username in bot_admins.items()])
-        embed.add_field(name="Bot Admins", value=bot_admins_list, inline=False)
+    if admin_plus:
+        admin_plus_list = "\n".join([f"{username} (ID: {user_id})" for user_id, username in admin_plus.items()])
+        embed.add_field(name="Admin+", value=admin_plus_list, inline=False)
     else:
-        embed.add_field(name="Bot Admins", value="No bot admins found.", inline=False)
+        embed.add_field(name="Admin+", value="No Admin+ found.", inline=False)
 
-    if normal_admins:
-        normal_admins_list = "\n".join([f"{username} (ID: {user_id})" for user_id, username in normal_admins.items()])
-        embed.add_field(name="Normal Admins", value=normal_admins_list, inline=False)
+    if admins:
+        admins_list = "\n".join([f"{username} (ID: {user_id})" for user_id, username in admins.items()])
+        embed.add_field(name="Admins", value=admins_list, inline=False)
     else:
-        embed.add_field(name="Normal Admins", value="No normal admins found.", inline=False)
+        embed.add_field(name="Admins", value="No admins found.", inline=False)
 
     # Send the embed, respecting the visibility option
     await interaction.response.send_message(embed=embed, ephemeral=not visible)
 
 
-@bot.tree.command(name="adminremove", description="Remove a normal admin from the bot (bot admins only).")
-@app_commands.describe(user="The user to be removed as a normal admin.")
-async def adminremove(interaction: discord.Interaction, user: discord.User):
-    """Remove a normal admin from the admin list."""
-    if not is_bot_admin(interaction.user.id):
+@bot.tree.command(name="removeadmin", description="Remove a admin from the bot (Admin+ only).")
+@app_commands.describe(user="The user to be removed as a admin.")
+async def removeadmin(interaction: discord.Interaction, user: discord.User):
+    """Remove a admin from the admin list."""
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
@@ -274,17 +388,17 @@ async def adminremove(interaction: discord.Interaction, user: discord.User):
     # Log action
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
     if log_channel:
-        await log_channel.send(f"{interaction.user.display_name} removed {user.display_name} from normal admin roles.")
+        await log_channel.send(f"{interaction.user.display_name} removed {user.display_name} from admin roles.")
 
-    await interaction.response.send_message(f"{user.display_name} has been removed as a normal admin.", ephemeral=True)
+    await interaction.response.send_message(f"{user.display_name} has been removed as a admin.", ephemeral=True)
 
 
 #Command: Admin Add - adds an admin to the file
-@bot.tree.command(name="adminadd", description="Add a normal admin to the bot (bot admins only).")
-@app_commands.describe(user="The user to be added as a normal admin.")
-async def adminadd(interaction: discord.Interaction, user: discord.User):
-    """Add a normal admin to the admin list."""
-    if not is_bot_admin(interaction.user.id):
+@bot.tree.command(name="addadmin", description="Add a admin to the bot (Admin+ only).")
+@app_commands.describe(user="The user to be added as a admin.")
+async def addadmin(interaction: discord.Interaction, user: discord.User):
+    """Add a admin to the admin list."""
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
@@ -293,16 +407,16 @@ async def adminadd(interaction: discord.Interaction, user: discord.User):
     # Log action
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
     if log_channel:
-        await log_channel.send(f"{interaction.user.display_name} added {user.display_name} as a normal admin.")
+        await log_channel.send(f"{interaction.user.display_name} added {user.display_name} as a admin.")
 
-    await interaction.response.send_message(f"{user.display_name} has been added as a normal admin.", ephemeral=True)
+    await interaction.response.send_message(f"{user.display_name} has been added as a admin.", ephemeral=True)
 
 #Command:Bot Admin Remove - removes a bot admin from the file
-@bot.tree.command(name="botadminremove", description="Remove a bot admin from the bot (bot admins only).")
+@bot.tree.command(name="removeadminplus", description="Remove a bot admin from the bot (Admin+ only).")
 @app_commands.describe(user="The user to be removed as a bot admin.")
-async def adminremove(interaction: discord.Interaction, user: discord.User):
-    """Remove a normal admin from the admin list."""
-    if not is_bot_admin(interaction.user.id):
+async def removeadmin(interaction: discord.Interaction, user: discord.User):
+    """Remove a admin from the admin list."""
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
@@ -311,7 +425,7 @@ async def adminremove(interaction: discord.Interaction, user: discord.User):
         await interaction.response.send_message("You can't remove yourself from the admin list!", ephemeral=True)
         return
 
-    remove_from_file("bot_admin.txt", user.id)
+    remove_from_file("admin_plus.txt", user.id)
 
     # Log action
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -322,15 +436,15 @@ async def adminremove(interaction: discord.Interaction, user: discord.User):
 
 
 #Command: Bot Admin Add - adds a bot admin to the file
-@bot.tree.command(name="botadminadd", description="Add a bot admin to the bot (bot admins only).")
+@bot.tree.command(name="addadminplus", description="Add a bot admin to the bot (Admin+ only).")
 @app_commands.describe(user="The user to be added as a bot admin.")
 async def adminadd(interaction: discord.Interaction, user: discord.User):
-    """Add a normal admin to the admin list."""
-    if not is_bot_admin(interaction.user.id):
+    """Add a admin to the admin list."""
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
-    add_to_file("bot_admin.txt", user.id, user.name)
+    add_to_file("admin_plus.txt", user.id, user.name)
 
     # Log action
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -341,10 +455,10 @@ async def adminadd(interaction: discord.Interaction, user: discord.User):
 
 
 # Command: Reset Week
-@bot.tree.command(name="resetweek", description="Reset all logged hours for all users (bot admins only).")
+@bot.tree.command(name="resetweek", description="Reset all logged hours for all users (Admin+ only).")
 async def resetweek(interaction: discord.Interaction):
     """Reset all logged hours for the current week."""
-    if not is_bot_admin(interaction.user.id):
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
@@ -468,11 +582,11 @@ class LogHoursModal(discord.ui.Modal):
             return
 
         try:
-            today = datetime.datetime.now(datetime.timezone.utc)
-            start_of_week = today - datetime.timedelta(days=today.weekday())
+            today = datetime.now(pytz.timezone("America/Chicago"))
+            start_of_week = today - timedelta(days=today.weekday())
             days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             day_index = days.index(self.day)
-            target_date = start_of_week + datetime.timedelta(days=day_index)
+            target_date = start_of_week + timedelta(days=day_index)
             target_date_str = target_date.strftime('%Y-%m-%d')
 
             # Use the helper function to add hours
@@ -504,10 +618,10 @@ class LogHoursModal(discord.ui.Modal):
 
             # Get the target date
             days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            today = datetime.datetime.now(datetime.timezone.utc)
-            start_of_week = today - datetime.timedelta(days=today.weekday())
+            today = datetime.now(pytz.timezone("America/Chicago"))
+            start_of_week = today - timedelta(days=today.weekday())
             day_index = days.index(self.day)
-            target_date = start_of_week + datetime.timedelta(days=day_index)
+            target_date = start_of_week + timedelta(days=day_index)
             target_date_str = target_date.strftime('%Y-%m-%d')
 
             # Consolidate hours
@@ -522,7 +636,57 @@ class LogHoursModal(discord.ui.Modal):
         except Exception as e:
             print(f"Error in LogHoursModal: {e}")
             await interaction.response.send_message("An error occurred. Please try again.", ephemeral=True)
+    
+#Setup the daily channelid and messageid
+@bot.tree.command(name="setdailyinfo", description="Set up the channel ID and message ID for daily button management.")
+@app_commands.describe(channel_id="The ID of the channel where the message is located.", message_id="The ID of the message to manage.")
+async def set_daily_info(interaction: discord.Interaction, channel_id: str, message_id: str):
+    """Command to set the channel ID and message ID for dailyButtons."""
+    if not is_admin_plus(interaction.user.id):
+        await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
+        return
 
+    try:
+        # Update the global daily_info dictionary
+        daily_info["channel_id"] = int(channel_id)
+        daily_info["message_id"] = int(message_id)
+
+        await interaction.response.send_message(
+            f"Daily button setup updated! Channel ID: `{channel_id}`, Message ID: `{message_id}`", ephemeral=True
+        )
+    except ValueError:
+        await interaction.response.send_message("Invalid ID format. Please provide numeric IDs.", ephemeral=True)
+
+# Daily action logic
+async def dailyButtons(test_day=None):
+    if not daily_info["channel_id"] or not daily_info["message_id"]:
+        print("Daily info not set. Use /setdailyinfo to configure channel and message IDs.")
+        return
+
+    cst = pytz.timezone("America/Chicago")
+    today = test_day or datetime.now(cst).strftime("%A")  # Get the current day (e.g., Monday, Tuesday)
+
+    channel = bot.get_channel(daily_info["channel_id"])
+    if not channel:
+        print("Channel not found.")
+        return
+
+    match today:
+        case "Monday":
+            await clearbuttons(daily_info["message_id"], channel)
+            await addbuttons(daily_info["message_id"], channel, "Monday")
+        case "Tuesday":
+            await addbuttons(daily_info["message_id"], channel, "Tuesday")
+        case "Wednesday":
+            await addbuttons(daily_info["message_id"], channel, "Wednesday")
+        case "Thursday":
+            await addbuttons(daily_info["message_id"], channel, "Thursday")
+        case "Friday":
+            await addbuttons(daily_info["message_id"], channel, "Friday")
+        case "Saturday":
+            await addbuttons(daily_info["message_id"], channel, "Saturday")
+        case "Sunday":
+            await addbuttons(daily_info["message_id"], channel, "Sunday")
 
 
 @bot.tree.command(name="games", description="Show the list of allowed games.")
@@ -554,17 +718,15 @@ async def games(interaction: discord.Interaction, visible: bool = False):
 @app_commands.describe(message_id="The ID of the message to clear buttons from.")
 async def clearbuttons(interaction: discord.Interaction, message_id: str):
     """Remove all buttons from a message."""
-    if not is_bot_admin(interaction.user.id):
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
         return
 
     try:
         # Fetch the message
-        channel = interaction.channel
-        message = await channel.fetch_message(int(message_id))
-
-        # Clear buttons by editing the message with an empty view
+        message = await interaction.channel.fetch_message(int(message_id))
         await message.edit(view=None)
+
 
         await interaction.response.send_message(
             f"Successfully removed all buttons from the message with ID `{message_id}`.", ephemeral=True
@@ -597,8 +759,8 @@ async def reset(interaction: discord.Interaction, user: discord.User, day: str =
 
     try:
         async with aiosqlite.connect('practice_logger.db') as db:
-            today = datetime.datetime.now(datetime.timezone.utc)
-            start_of_week = today - datetime.timedelta(days=today.weekday())
+            today = datetime.now(pytz.timezone("America/Chicago"))
+            start_of_week = today - timedelta(days=today.weekday())
 
             if day:
                 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -607,7 +769,7 @@ async def reset(interaction: discord.Interaction, user: discord.User, day: str =
                     return
 
                 day_index = days.index(day.capitalize())
-                target_date = start_of_week + datetime.timedelta(days=day_index)
+                target_date = start_of_week + timedelta(days=day_index)
                 target_date_str = target_date.strftime('%Y-%m-%d')
 
                 # Delete all games logged on the specific day
@@ -644,15 +806,15 @@ async def hours(interaction: discord.Interaction, user: discord.User = None, vis
     # Defer the response with visibility option
     await interaction.response.defer(ephemeral=not visible)
 
-    if not user == None and not is_admin(interaction.user.id):
+    if not user == None and not user == interaction.user and not is_admin(interaction.user.id):
         await interaction.followup.send("You aren't able to view someone else's hours!", ephemeral=True)
         return
 
     try:
         async with aiosqlite.connect('practice_logger.db') as db:
             # Start of the week (Monday)
-            today = datetime.datetime.now(datetime.timezone.utc)
-            start_of_week = today - datetime.timedelta(days=today.weekday())
+            today = datetime.now(pytz.timezone("America/Chicago"))
+            start_of_week = today - timedelta(days=today.weekday())
             start_of_week_str = start_of_week.strftime('%Y-%m-%d')
 
             # Fetch logs for the week
@@ -672,7 +834,7 @@ async def hours(interaction: discord.Interaction, user: discord.User = None, vis
             weekly_totals = {}
 
             for log_date, game, hours, details in logs:
-                log_date_obj = datetime.datetime.strptime(log_date, '%Y-%m-%d')
+                log_date_obj = datetime.strptime(log_date, '%Y-%m-%d')
                 day_name = log_date_obj.strftime('%A')
 
                 # Add detailed log for the day
@@ -686,7 +848,7 @@ async def hours(interaction: discord.Interaction, user: discord.User = None, vis
                 title=f"Weekly Logged Hours for {target_user.display_name}",
                 description="Here are the hours logged this week, separated by day and game.",
                 color=discord.Color.blue(),
-                timestamp=datetime.datetime.now()
+                timestamp=datetime.now()
             )
 
             # Add logs to embed, day by day
@@ -742,10 +904,10 @@ async def add(
     admin_name = interaction.user.display_name
 
     try:
-        today = datetime.datetime.now(datetime.timezone.utc)
-        start_of_week = today - datetime.timedelta(days=today.weekday())
+        today = datetime.now(pytz.timezone("America/Chicago"))
+        start_of_week = today - timedelta(days=today.weekday())
         day_index = days.index(day.capitalize())
-        target_date = start_of_week + datetime.timedelta(days=day_index)
+        target_date = start_of_week + timedelta(days=day_index)
         target_date_str = target_date.strftime('%Y-%m-%d')
 
         # Use the helper function to add hours
@@ -783,10 +945,10 @@ async def remove(interaction: discord.Interaction, day: str, game: str, hours: f
     admin_name = interaction.user.display_name
 
     try:
-        today = datetime.datetime.now(datetime.timezone.utc)
-        start_of_week = today - datetime.timedelta(days=today.weekday())
+        today = datetime.now(pytz.timezone("America/Chicago"))
+        start_of_week = today - timedelta(days=today.weekday())
         day_index = days.index(day.capitalize())
-        target_date = start_of_week + datetime.timedelta(days=day_index)
+        target_date = start_of_week + timedelta(days=day_index)
         target_date_str = target_date.strftime('%Y-%m-%d')
 
         async with aiosqlite.connect('practice_logger.db') as db:
@@ -872,19 +1034,63 @@ class DayButtonView(discord.ui.View):
             modal = LogHoursModal(day)
             await interaction.response.send_modal(modal)
 
+# Add buttons for a specific day
+async def addbuttons(message_id, channel, new_day):
+    """Add a button for the new day without removing existing buttons."""
+    try:
+        # Fetch the message
+        message = await channel.fetch_message(int(message_id))
+
+        # Get current buttons if any
+        if message.components:  # Check if there are already buttons
+            existing_days = [
+                component.label
+                for row in message.components
+                for component in row.children
+            ]
+        else:
+            existing_days = []
+
+        # Add the new day to the list
+        if new_day not in existing_days:
+            existing_days.append(new_day)
+
+        # Create a new view with the updated days
+        view = DayButtonView(existing_days)
+        await message.edit(view=view)
+
+    except discord.NotFound:
+        print(f"Message with ID {message_id} not found.")
+    except discord.Forbidden:
+        print("Bot lacks permissions to edit the message.")
+    except discord.HTTPException as e:
+        print(f"An HTTP exception occurred: {e}")
+
+# Clear buttons from the specified message
+async def clearbuttons(message_id, channel):
+    try:
+        message = await channel.fetch_message(int(message_id))
+        await message.edit(view=None)
+    except discord.NotFound:
+        print(f"Message with ID {message_id} not found.")
+    except discord.Forbidden:
+        print("Bot lacks permissions to edit the message.")
+    except discord.HTTPException as e:
+        print(f"An HTTP exception occurred: {e}")
+
 @bot.tree.command(name='addbuttons', description='Add buttons to a message for days of the week (starting from Monday).')
 @app_commands.describe(message_id='The ID of the message to add buttons to.')
 async def add_buttons(interaction: discord.Interaction, message_id: str):
     """Add buttons dynamically for the days of the week, starting from Monday."""
-    if not is_bot_admin(interaction.user.id):
+    if not is_admin_plus(interaction.user.id):
         await interaction.response.send_message('You are not authorized to use this command.', ephemeral=True)
         return
 
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']  # Default to Monday
     view = DayButtonView(days)
+    channel = interaction.channel
 
     try:
-        # Fetch the message and add the buttons
         message = await interaction.channel.fetch_message(message_id)
         await message.edit(view=view)
         await interaction.response.send_message(f'Buttons for days starting from Monday have been added to message {message_id}.', ephemeral=True)
@@ -1014,124 +1220,5 @@ async def report(interaction: discord.Interaction, visible: bool = False):
             content="An error occurred while generating the report. Please try again later.",
             ephemeral=True
         )
-
-
-@tasks.loop(time=datetime.time(hour=23, minute=59, second=0, tzinfo=datetime.timezone.utc))
-async def weekly_report_task():
-    """Send a weekly report with an Excel file and reset hours for everyone."""
-    log_channel = bot.get_channel(LOG_CHANNEL_ID)
-
-    try:
-        if not log_channel:
-            print("Log channel not found.")
-            return
-
-        # Fetch all members in the guild
-        guild = bot.get_guild(GUILD_ID)  # Replace GUILD_ID with your server's ID
-        members = guild.members if guild else []
-
-        async with aiosqlite.connect('practice_logger.db') as db:
-            # Fetch distinct games from the database
-            query_games = "SELECT DISTINCT game FROM hours"
-            async with db.execute(query_games) as cursor:
-                games = [row[0] for row in await cursor.fetchall()]
-
-            # Prepare user data dictionary
-            user_data = {member.id: {"name": member.display_name, "games": {}, "total_hours": 0} for member in members}
-
-            # Fetch logs for all users
-            query_hours = '''
-                SELECT user_id, game, SUM(hours) as total_hours
-                FROM hours
-                GROUP BY user_id, game
-            '''
-            async with db.execute(query_hours) as cursor:
-                logs = await cursor.fetchall()
-
-            # Populate the user data dictionary
-            for log in logs:
-                user_id, game_name, total_hours = log
-                if user_id in user_data:
-                    user_data[user_id]["games"][game_name] = total_hours
-                    user_data[user_id]["total_hours"] += total_hours
-
-            # Prepare the Excel workbook
-            workbook = Workbook()
-            workbook.remove(workbook.active)  # Remove default sheet
-
-            # Create a summary sheet for all users
-            summary_sheet = workbook.create_sheet(title="Summary")
-            summary_sheet.append(["User", "UserID", "Games Played", "Total Weekly Hours"])
-
-            # Populate the summary sheet
-            for user_id, data in user_data.items():
-                games_played = list(data["games"].keys())
-                game_totals = list(data["games"].values())
-
-                row = [
-                    data["name"],  # User
-                    user_id,  # UserID
-                    ", ".join(games_played) if games_played else "No games played",  # Games Played
-                    ", ".join([f"{hours:.2f}" for hours in game_totals]) if game_totals else "0.00"  # Weekly Hours per Game
-                ]
-                summary_sheet.append(row)
-
-            # Apply conditional formatting to the summary sheet
-            for row in summary_sheet.iter_rows(min_row=2, max_row=summary_sheet.max_row, min_col=4, max_col=4):
-                totals_cell = row[0]
-                totals = totals_cell.value
-                if totals and totals != "0.00":
-                    for total in totals.split(", "):
-                        total_hours = float(total)
-                        if total_hours >= 10:
-                            fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")  # Green
-                        elif 5 <= total_hours < 10:
-                            fill = PatternFill(start_color="FFFFE0", end_color="FFFFE0", fill_type="solid")  # Yellow
-                        else:
-                            fill = PatternFill(start_color="FFC0CB", end_color="FFC0CB", fill_type="solid")  # Red
-                        totals_cell.fill = fill
-
-            # Create individual sheets per game
-            for game in games:
-                sheet = workbook.create_sheet(title=game)
-                sheet.append(["User", "UserID", "Total Hours"])
-
-                for user_id, data in user_data.items():
-                    if game in data["games"]:
-                        sheet.append([data["name"], user_id, data["games"][game]])
-
-                # Apply conditional formatting to the game sheet
-                for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=3, max_col=3):
-                    total_hours_cell = row[0]
-                    total_hours = total_hours_cell.value
-                    if total_hours is not None:
-                        if total_hours >= 10:
-                            fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")  # Green
-                        elif 5 <= total_hours < 10:
-                            fill = PatternFill(start_color="FFFFE0", end_color="FFFFE0", fill_type="solid")  # Yellow
-                        else:
-                            fill = PatternFill(start_color="FFC0CB", end_color="FFC0CB", fill_type="solid")  # Red
-                        total_hours_cell.fill = fill
-
-            # Save the workbook
-            file_path = "weekly_hours_report.xlsx"
-            workbook.save(file_path)
-
-            # Send the report to the log channel
-            await log_channel.send(
-                content="Here is the weekly hours report:",
-                file=discord.File(file_path)
-            )
-            print("Weekly report sent to the log channel.")
-
-        # Reset hours after the report is sent
-        #async with aiosqlite.connect('practice_logger.db') as db:
-        #    await db.execute("DELETE FROM hours")
-        #    await db.commit()
-
-       # await log_channel.send("All logged hours have been reset for the new week.")
-       # print("Weekly hours reset successfully.")
-    except Exception as e:
-        print(f"Error in weekly_report_task: {e}")
 
 bot.run(TOKEN)
