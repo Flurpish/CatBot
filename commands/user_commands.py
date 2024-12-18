@@ -6,14 +6,15 @@ import aiosqlite
 from config import LOG_CHANNEL_ID
 from utils import is_admin, get_allowed_games
 from bot_instance import bot
+from config import GUILD_ID
 
-@bot.tree.command(name='ping', description='Check the bot\'s latency.')
+@bot.tree.command(name='ping', description='Check the bot\'s latency.',  guild=discord.Object(id=GUILD_ID))
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     await interaction.response.send_message(f'Pong! Latency: {latency}ms')
 
 
-@bot.tree.command(name="hours", description="View your logged hours for the week.")
+@bot.tree.command(name="hours", description="View your logged hours for the week.",  guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(
     user="Optional: specify another user (Admin only)",
     visible="Make output visible to everyone?"
@@ -73,7 +74,7 @@ async def hours(interaction: discord.Interaction, user: discord.User = None, vis
         await interaction.followup.send("Error retrieving hours.", ephemeral=True)
 
 
-@bot.tree.command(name="games", description="Show the list of allowed games.")
+@bot.tree.command(name="games", description="Show the list of allowed games.",  guild=discord.Object(id=GUILD_ID))
 @app_commands.describe(visible="Make output visible?")
 async def games(interaction: discord.Interaction, visible: bool = False):
     allowed_games = get_allowed_games()
