@@ -15,4 +15,4 @@ To connect it to a discord server, update the server ID in the bot
 Update the log channel value
 
 #Token for git, expires Dec 21
-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
+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
